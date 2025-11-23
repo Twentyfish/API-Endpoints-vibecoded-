@@ -1,18 +1,24 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import sqlite3
-from datetime import datetime
 import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)  # Allow cross-origin requests
+CORS(app)
 
-DATABASE = 'blacklist.db'  # Replace with your actual database file path
+# PostgreSQL connection
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
     """Create a database connection"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
+
+def dict_cursor_conn():
+    """Get connection with dict cursor"""
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
 
 # ==================== BLACKLISTED USERS ====================
@@ -20,16 +26,22 @@ def get_db_connection():
 @app.route('/api/blacklisted-users', methods=['GET'])
 def get_blacklisted_users():
     """Get all blacklisted users"""
-    conn = get_db_connection()
-    users = conn.execute('SELECT * FROM blacklisted_users').fetchall()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM blacklisted_users')
+    users = cur.fetchall()
+    cur.close()
     conn.close()
     return jsonify([dict(user) for user in users])
 
 @app.route('/api/blacklisted-users/<int:user_id>', methods=['GET'])
 def get_blacklisted_user(user_id):
     """Get specific blacklisted user by ID"""
-    conn = get_db_connection()
-    user = conn.execute('SELECT * FROM blacklisted_users WHERE user_id = ?', (user_id,)).fetchone()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM blacklisted_users WHERE user_id = %s', (user_id,))
+    user = cur.fetchone()
+    cur.close()
     conn.close()
     
     if user is None:
@@ -51,15 +63,18 @@ def add_blacklisted_user():
         return jsonify({'error': 'Missing required fields'}), 400
     
     conn = get_db_connection()
+    cur = conn.cursor()
     try:
-        conn.execute(
-            'INSERT INTO blacklisted_users (user_id, username, reason, added_by) VALUES (?, ?, ?, ?)',
+        cur.execute(
+            'INSERT INTO blacklisted_users (user_id, username, reason, added_by) VALUES (%s, %s, %s, %s)',
             (user_id, username, reason, added_by)
         )
         conn.commit()
+        cur.close()
         conn.close()
         return jsonify({'message': 'User added to blacklist', 'user_id': user_id}), 201
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
+        cur.close()
         conn.close()
         return jsonify({'error': 'User already exists in blacklist'}), 409
 
@@ -67,11 +82,14 @@ def add_blacklisted_user():
 def remove_blacklisted_user(user_id):
     """Remove a user from blacklist"""
     conn = get_db_connection()
-    result = conn.execute('DELETE FROM blacklisted_users WHERE user_id = ?', (user_id,))
+    cur = conn.cursor()
+    cur.execute('DELETE FROM blacklisted_users WHERE user_id = %s', (user_id,))
+    rowcount = cur.rowcount
     conn.commit()
+    cur.close()
     conn.close()
     
-    if result.rowcount == 0:
+    if rowcount == 0:
         return jsonify({'error': 'User not found'}), 404
     
     return jsonify({'message': 'User removed from blacklist'})
@@ -81,16 +99,22 @@ def remove_blacklisted_user(user_id):
 @app.route('/api/blacklisted-groups', methods=['GET'])
 def get_blacklisted_groups():
     """Get all blacklisted groups"""
-    conn = get_db_connection()
-    groups = conn.execute('SELECT * FROM blacklisted_groups').fetchall()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM blacklisted_groups')
+    groups = cur.fetchall()
+    cur.close()
     conn.close()
     return jsonify([dict(group) for group in groups])
 
 @app.route('/api/blacklisted-groups/<int:group_id>', methods=['GET'])
 def get_blacklisted_group(group_id):
     """Get specific blacklisted group by ID"""
-    conn = get_db_connection()
-    group = conn.execute('SELECT * FROM blacklisted_groups WHERE group_id = ?', (group_id,)).fetchone()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM blacklisted_groups WHERE group_id = %s', (group_id,))
+    group = cur.fetchone()
+    cur.close()
     conn.close()
     
     if group is None:
@@ -111,15 +135,18 @@ def add_blacklisted_group():
         return jsonify({'error': 'Missing required fields'}), 400
     
     conn = get_db_connection()
+    cur = conn.cursor()
     try:
-        conn.execute(
-            'INSERT INTO blacklisted_groups (group_id, reason, added_by) VALUES (?, ?, ?)',
+        cur.execute(
+            'INSERT INTO blacklisted_groups (group_id, reason, added_by) VALUES (%s, %s, %s)',
             (group_id, reason, added_by)
         )
         conn.commit()
+        cur.close()
         conn.close()
         return jsonify({'message': 'Group added to blacklist', 'group_id': group_id}), 201
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
+        cur.close()
         conn.close()
         return jsonify({'error': 'Group already exists in blacklist'}), 409
 
@@ -128,25 +155,35 @@ def add_blacklisted_group():
 @app.route('/api/keywords/specific', methods=['GET'])
 def get_specific_keywords():
     """Get all specific flagged keywords"""
-    conn = get_db_connection()
-    keywords = conn.execute('SELECT * FROM flagged_keywords_specific').fetchall()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM flagged_keywords_specific')
+    keywords = cur.fetchall()
+    cur.close()
     conn.close()
     return jsonify([dict(kw) for kw in keywords])
 
 @app.route('/api/keywords/nonspecific', methods=['GET'])
 def get_nonspecific_keywords():
     """Get all nonspecific flagged keywords"""
-    conn = get_db_connection()
-    keywords = conn.execute('SELECT * FROM flagged_keywords_nonspecific').fetchall()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM flagged_keywords_nonspecific')
+    keywords = cur.fetchall()
+    cur.close()
     conn.close()
     return jsonify([dict(kw) for kw in keywords])
 
 @app.route('/api/keywords/all', methods=['GET'])
 def get_all_keywords():
     """Get all flagged keywords from both tables"""
-    conn = get_db_connection()
-    specific = conn.execute('SELECT *, "specific" as type FROM flagged_keywords_specific').fetchall()
-    nonspecific = conn.execute('SELECT *, "nonspecific" as type FROM flagged_keywords_nonspecific').fetchall()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT *, \'specific\' as type FROM flagged_keywords_specific')
+    specific = cur.fetchall()
+    cur.execute('SELECT *, \'nonspecific\' as type FROM flagged_keywords_nonspecific')
+    nonspecific = cur.fetchall()
+    cur.close()
     conn.close()
     
     all_keywords = [dict(kw) for kw in specific] + [dict(kw) for kw in nonspecific]
@@ -161,9 +198,13 @@ def check_text_for_keywords():
     if not text:
         return jsonify({'error': 'No text provided'}), 400
     
-    conn = get_db_connection()
-    specific = conn.execute('SELECT keyword FROM flagged_keywords_specific').fetchall()
-    nonspecific = conn.execute('SELECT keyword FROM flagged_keywords_nonspecific').fetchall()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT keyword FROM flagged_keywords_specific')
+    specific = cur.fetchall()
+    cur.execute('SELECT keyword FROM flagged_keywords_nonspecific')
+    nonspecific = cur.fetchall()
+    cur.close()
     conn.close()
     
     found_keywords = []
@@ -191,16 +232,22 @@ def check_text_for_keywords():
 @app.route('/api/realms-blacklist', methods=['GET'])
 def get_realms_blacklist():
     """Get all users on realms blacklist"""
-    conn = get_db_connection()
-    users = conn.execute('SELECT * FROM realms_blacklist').fetchall()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM realms_blacklist')
+    users = cur.fetchall()
+    cur.close()
     conn.close()
     return jsonify([dict(user) for user in users])
 
 @app.route('/api/command-blacklist', methods=['GET'])
 def get_command_blacklist():
     """Get all users on command blacklist"""
-    conn = get_db_connection()
-    users = conn.execute('SELECT * FROM command_blacklist').fetchall()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM command_blacklist')
+    users = cur.fetchall()
+    cur.close()
     conn.close()
     return jsonify([dict(user) for user in users])
 
@@ -209,7 +256,8 @@ def get_command_blacklist():
 @app.route('/api/search/user/<username>', methods=['GET'])
 def search_user(username):
     """Search for a user across all blacklist tables"""
-    conn = get_db_connection()
+    conn = dict_cursor_conn()
+    cur = conn.cursor()
     
     results = {
         'blacklisted_users': [],
@@ -218,26 +266,27 @@ def search_user(username):
     }
     
     # Search in blacklisted_users
-    users = conn.execute(
-        'SELECT * FROM blacklisted_users WHERE username LIKE ?',
+    cur.execute(
+        'SELECT * FROM blacklisted_users WHERE username ILIKE %s',
         (f'%{username}%',)
-    ).fetchall()
-    results['blacklisted_users'] = [dict(u) for u in users]
+    )
+    results['blacklisted_users'] = [dict(u) for u in cur.fetchall()]
     
     # Search in realms_blacklist
-    realms = conn.execute(
-        'SELECT * FROM realms_blacklist WHERE username LIKE ?',
+    cur.execute(
+        'SELECT * FROM realms_blacklist WHERE username ILIKE %s',
         (f'%{username}%',)
-    ).fetchall()
-    results['realms_blacklist'] = [dict(r) for r in realms]
+    )
+    results['realms_blacklist'] = [dict(r) for r in cur.fetchall()]
     
     # Search in command_blacklist
-    commands = conn.execute(
-        'SELECT * FROM command_blacklist WHERE username LIKE ?',
+    cur.execute(
+        'SELECT * FROM command_blacklist WHERE username ILIKE %s',
         (f'%{username}%',)
-    ).fetchall()
-    results['command_blacklist'] = [dict(c) for c in commands]
+    )
+    results['command_blacklist'] = [dict(c) for c in cur.fetchall()]
     
+    cur.close()
     conn.close()
     
     return jsonify(results)
@@ -246,16 +295,29 @@ def search_user(username):
 def get_stats():
     """Get statistics about the database"""
     conn = get_db_connection()
+    cur = conn.cursor()
     
-    stats = {
-        'blacklisted_users': conn.execute('SELECT COUNT(*) FROM blacklisted_users').fetchone()[0],
-        'blacklisted_groups': conn.execute('SELECT COUNT(*) FROM blacklisted_groups').fetchone()[0],
-        'flagged_keywords_specific': conn.execute('SELECT COUNT(*) FROM flagged_keywords_specific').fetchone()[0],
-        'flagged_keywords_nonspecific': conn.execute('SELECT COUNT(*) FROM flagged_keywords_nonspecific').fetchone()[0],
-        'realms_blacklist': conn.execute('SELECT COUNT(*) FROM realms_blacklist').fetchone()[0],
-        'command_blacklist': conn.execute('SELECT COUNT(*) FROM command_blacklist').fetchone()[0]
-    }
+    stats = {}
     
+    cur.execute('SELECT COUNT(*) FROM blacklisted_users')
+    stats['blacklisted_users'] = cur.fetchone()[0]
+    
+    cur.execute('SELECT COUNT(*) FROM blacklisted_groups')
+    stats['blacklisted_groups'] = cur.fetchone()[0]
+    
+    cur.execute('SELECT COUNT(*) FROM flagged_keywords_specific')
+    stats['flagged_keywords_specific'] = cur.fetchone()[0]
+    
+    cur.execute('SELECT COUNT(*) FROM flagged_keywords_nonspecific')
+    stats['flagged_keywords_nonspecific'] = cur.fetchone()[0]
+    
+    cur.execute('SELECT COUNT(*) FROM realms_blacklist')
+    stats['realms_blacklist'] = cur.fetchone()[0]
+    
+    cur.execute('SELECT COUNT(*) FROM command_blacklist')
+    stats['command_blacklist'] = cur.fetchone()[0]
+    
+    cur.close()
     conn.close()
     return jsonify(stats)
 
@@ -282,29 +344,6 @@ def home():
             'GET /api/stats': 'Get database statistics'
         }
     })
-
-@app.route('/api/admin/upload-db', methods=['POST'])
-def upload_database():
-    """Temporary endpoint to upload database file - REMOVE AFTER USE"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
-        
-        file = request.files['file']
-        file.save(DATABASE)
-        
-        # Verify tables exist
-        conn = get_db_connection()
-        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        conn.close()
-        
-        return jsonify({
-            'message': 'Database uploaded successfully',
-            'path': DATABASE,
-            'tables': [t['name'] for t in tables]
-        }), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     import os
