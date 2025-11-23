@@ -1,1 +1,2 @@
 web: python Database.py
+web: gunicorn app:app
