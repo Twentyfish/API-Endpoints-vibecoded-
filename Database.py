@@ -2,11 +2,28 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 from datetime import datetime
+import os
+from functools import wraps
 
 app = Flask(__name__)
 CORS(app)  # Allow cross-origin requests
 
 DATABASE = 'blacklist.db'  # Replace with your actual database file path
+API_KEY = os.environ.get('API_KEY')  # Get API key from environment variable
+
+def require_api_key(f):
+    """Decorator to require API key for protected endpoints"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Get API key from header
+        provided_key = request.headers.get('X-API-Key')
+        
+        # Check if API key is valid
+        if not provided_key or provided_key != API_KEY:
+            return jsonify({'error': 'Invalid or missing API key'}), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
 
 def get_db_connection():
     """Create a database connection"""
@@ -17,6 +34,7 @@ def get_db_connection():
 # ==================== BLACKLISTED USERS ====================
 
 @app.route('/api/blacklisted-users', methods=['GET'])
+@require_api_key
 def get_blacklisted_users():
     """Get all blacklisted users"""
     conn = get_db_connection()
@@ -25,6 +43,7 @@ def get_blacklisted_users():
     return jsonify([dict(user) for user in users])
 
 @app.route('/api/blacklisted-users/<int:user_id>', methods=['GET'])
+@require_api_key
 def get_blacklisted_user(user_id):
     """Get specific blacklisted user by ID"""
     conn = get_db_connection()
@@ -37,6 +56,7 @@ def get_blacklisted_user(user_id):
     return jsonify(dict(user))
 
 @app.route('/api/blacklisted-users', methods=['POST'])
+@require_api_key
 def add_blacklisted_user():
     """Add a new blacklisted user"""
     data = request.get_json()
@@ -63,6 +83,7 @@ def add_blacklisted_user():
         return jsonify({'error': 'User already exists in blacklist'}), 409
 
 @app.route('/api/blacklisted-users/<int:user_id>', methods=['DELETE'])
+@require_api_key
 def remove_blacklisted_user(user_id):
     """Remove a user from blacklist"""
     conn = get_db_connection()
@@ -78,6 +99,7 @@ def remove_blacklisted_user(user_id):
 # ==================== BLACKLISTED GROUPS ====================
 
 @app.route('/api/blacklisted-groups', methods=['GET'])
+@require_api_key
 def get_blacklisted_groups():
     """Get all blacklisted groups"""
     conn = get_db_connection()
@@ -86,6 +108,7 @@ def get_blacklisted_groups():
     return jsonify([dict(group) for group in groups])
 
 @app.route('/api/blacklisted-groups/<int:group_id>', methods=['GET'])
+@require_api_key
 def get_blacklisted_group(group_id):
     """Get specific blacklisted group by ID"""
     conn = get_db_connection()
@@ -98,6 +121,7 @@ def get_blacklisted_group(group_id):
     return jsonify(dict(group))
 
 @app.route('/api/blacklisted-groups', methods=['POST'])
+@require_api_key
 def add_blacklisted_group():
     """Add a new blacklisted group"""
     data = request.get_json()
@@ -125,6 +149,7 @@ def add_blacklisted_group():
 # ==================== FLAGGED KEYWORDS ====================
 
 @app.route('/api/keywords/specific', methods=['GET'])
+@require_api_key
 def get_specific_keywords():
     """Get all specific flagged keywords"""
     conn = get_db_connection()
@@ -133,6 +158,7 @@ def get_specific_keywords():
     return jsonify([dict(kw) for kw in keywords])
 
 @app.route('/api/keywords/nonspecific', methods=['GET'])
+@require_api_key
 def get_nonspecific_keywords():
     """Get all nonspecific flagged keywords"""
     conn = get_db_connection()
@@ -141,6 +167,7 @@ def get_nonspecific_keywords():
     return jsonify([dict(kw) for kw in keywords])
 
 @app.route('/api/keywords/all', methods=['GET'])
+@require_api_key
 def get_all_keywords():
     """Get all flagged keywords from both tables"""
     conn = get_db_connection()
@@ -152,6 +179,7 @@ def get_all_keywords():
     return jsonify(all_keywords)
 
 @app.route('/api/keywords/check', methods=['POST'])
+@require_api_key
 def check_text_for_keywords():
     """Check if text contains any flagged keywords"""
     data = request.get_json()
@@ -188,6 +216,7 @@ def check_text_for_keywords():
 # ==================== REALMS & COMMAND BLACKLIST ====================
 
 @app.route('/api/realms-blacklist', methods=['GET'])
+@require_api_key
 def get_realms_blacklist():
     """Get all users on realms blacklist"""
     conn = get_db_connection()
@@ -196,6 +225,7 @@ def get_realms_blacklist():
     return jsonify([dict(user) for user in users])
 
 @app.route('/api/command-blacklist', methods=['GET'])
+@require_api_key
 def get_command_blacklist():
     """Get all users on command blacklist"""
     conn = get_db_connection()
@@ -206,6 +236,7 @@ def get_command_blacklist():
 # ==================== SEARCH & UTILITY ====================
 
 @app.route('/api/search/user/<username>', methods=['GET'])
+@require_api_key
 def search_user(username):
     """Search for a user across all blacklist tables"""
     conn = get_db_connection()
@@ -242,6 +273,7 @@ def search_user(username):
     return jsonify(results)
 
 @app.route('/api/stats', methods=['GET'])
+@require_api_key
 def get_stats():
     """Get statistics about the database"""
     conn = get_db_connection()
@@ -263,12 +295,15 @@ def home():
     """API documentation"""
     return jsonify({
         'message': 'Blacklist Database API',
+        'authentication': 'All endpoints require X-API-Key header',
         'endpoints': {
             'GET /api/blacklisted-users': 'Get all blacklisted users',
             'GET /api/blacklisted-users/<id>': 'Get specific user',
             'POST /api/blacklisted-users': 'Add user to blacklist',
             'DELETE /api/blacklisted-users/<id>': 'Remove user from blacklist',
             'GET /api/blacklisted-groups': 'Get all blacklisted groups',
+            'GET /api/blacklisted-groups/<id>': 'Get specific group',
+            'POST /api/blacklisted-groups': 'Add group to blacklist',
             'GET /api/keywords/specific': 'Get specific keywords',
             'GET /api/keywords/nonspecific': 'Get nonspecific keywords',
             'GET /api/keywords/all': 'Get all keywords',
@@ -277,8 +312,14 @@ def home():
             'GET /api/command-blacklist': 'Get command blacklist',
             'GET /api/search/user/<username>': 'Search for user',
             'GET /api/stats': 'Get database statistics'
+        },
+        'usage': {
+            'header': 'X-API-Key',
+            'example': 'curl -H "X-API-Key: your-key-here" https://database-teut.up.railway.app/api/stats'
         }
     })
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
