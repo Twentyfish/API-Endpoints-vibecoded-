@@ -319,8 +319,32 @@ def home():
         }
     })
 
+@app.route('/api/admin/upload-db', methods=['POST'])
+def upload_database():
+    """Temporary endpoint to upload database file - REMOVE AFTER USE"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        file.save(DATABASE)
+        
+        # Verify tables exist
+        conn = get_db_connection()
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        conn.close()
+        
+        return jsonify({
+            'message': 'Database uploaded successfully',
+            'path': DATABASE,
+            'tables': [t['name'] for t in tables]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
+
 
