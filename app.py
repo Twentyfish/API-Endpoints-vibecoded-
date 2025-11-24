@@ -1,9 +1,9 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from psycopg2 import pool
+import psycopg
+from psycopg.rows import dict_row
+from psycopg import pool
 from datetime import datetime
 from functools import wraps
 
@@ -38,22 +38,20 @@ if not DATABASE_URL:
 connection_pool = None
 if DATABASE_URL:
     try:
-        connection_pool = psycopg2.pool.SimpleConnectionPool(
-            1,  # Minimum connections
-            20,  # Maximum connections
-            DATABASE_URL
+        connection_pool = psycopg.pool.ConnectionPool(
+            DATABASE_URL,
+            min_size=1,
+            max_size=20
         )
         if connection_pool:
             print("✓ Connection pool created successfully")
             # Test the connection
-            test_conn = connection_pool.getconn()
-            test_cur = test_conn.cursor()
-            test_cur.execute('SELECT version()')
-            version = test_cur.fetchone()[0]
-            print(f"✓ Connected to PostgreSQL")
-            print(f"  {version[:80]}...")
-            test_cur.close()
-            connection_pool.putconn(test_conn)
+            with connection_pool.connection() as test_conn:
+                with test_conn.cursor() as test_cur:
+                    test_cur.execute('SELECT version()')
+                    version = test_cur.fetchone()[0]
+                    print(f"✓ Connected to PostgreSQL")
+                    print(f"  {version[:80]}...")
     except Exception as e:
         print(f"✗ Error creating connection pool: {e}")
         print("  The application will start but database operations will fail.")
@@ -65,14 +63,11 @@ def get_db_connection():
     """Get a connection from the pool"""
     if not connection_pool:
         raise Exception("Database connection pool not initialized. Please set DATABASE_URL.")
-    return connection_pool.getconn()
+    return connection_pool.connection()
 
 def return_db_connection(conn):
     """Return a connection to the pool"""
-    if connection_pool:
-        connection_pool.putconn(conn)
-    else:
-        conn.close()
+    conn.close()
 
 def handle_db_errors(f):
     """Decorator for handling database errors"""
@@ -99,7 +94,7 @@ def handle_db_errors(f):
 def get_blacklisted_users():
     """Get all blacklisted users"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT * FROM blacklisted_users ORDER BY added_at DESC')
         users = cur.fetchall()
@@ -113,7 +108,7 @@ def get_blacklisted_users():
 def get_blacklisted_user(user_id):
     """Get specific blacklisted user by ID"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT * FROM blacklisted_users WHERE user_id = %s', (user_id,))
         user = cur.fetchone()
@@ -149,7 +144,7 @@ def add_blacklisted_user():
         )
         conn.commit()
         return jsonify({'message': 'User added to blacklist', 'user_id': user_id}), 201
-    except psycopg2.IntegrityError:
+    except psycopg.IntegrityError:
         conn.rollback()
         return jsonify({'error': 'User already exists in blacklist'}), 409
     finally:
@@ -182,7 +177,7 @@ def remove_blacklisted_user(user_id):
 def get_blacklisted_groups():
     """Get all blacklisted groups"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT * FROM blacklisted_groups ORDER BY added_at DESC')
         groups = cur.fetchall()
@@ -196,7 +191,7 @@ def get_blacklisted_groups():
 def get_blacklisted_group(group_id):
     """Get specific blacklisted group by ID"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT * FROM blacklisted_groups WHERE group_id = %s', (group_id,))
         group = cur.fetchone()
@@ -231,7 +226,7 @@ def add_blacklisted_group():
         )
         conn.commit()
         return jsonify({'message': 'Group added to blacklist', 'group_id': group_id}), 201
-    except psycopg2.IntegrityError:
+    except psycopg.IntegrityError:
         conn.rollback()
         return jsonify({'error': 'Group already exists in blacklist'}), 409
     finally:
@@ -264,7 +259,7 @@ def remove_blacklisted_group(group_id):
 def get_specific_keywords():
     """Get all specific flagged keywords"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT * FROM flagged_keywords_specific ORDER BY keyword')
         keywords = cur.fetchall()
@@ -278,7 +273,7 @@ def get_specific_keywords():
 def get_nonspecific_keywords():
     """Get all nonspecific flagged keywords"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT * FROM flagged_keywords_nonspecific ORDER BY keyword')
         keywords = cur.fetchall()
@@ -292,7 +287,7 @@ def get_nonspecific_keywords():
 def get_all_keywords():
     """Get all flagged keywords from both tables"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT *, \'specific\' as type FROM flagged_keywords_specific')
         specific = cur.fetchall()
@@ -316,7 +311,7 @@ def check_text_for_keywords():
         return jsonify({'error': 'No text provided'}), 400
     
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT keyword FROM flagged_keywords_specific')
         specific = cur.fetchall()
@@ -353,7 +348,7 @@ def check_text_for_keywords():
 def get_realms_blacklist():
     """Get all users on realms blacklist"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT * FROM realms_blacklist ORDER BY added_at DESC')
         users = cur.fetchall()
@@ -367,7 +362,7 @@ def get_realms_blacklist():
 def get_command_blacklist():
     """Get all users on command blacklist"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     try:
         cur.execute('SELECT * FROM command_blacklist ORDER BY added_at DESC')
         users = cur.fetchall()
@@ -383,7 +378,7 @@ def get_command_blacklist():
 def search_user(username):
     """Search for a user across all blacklist tables"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(row_factory=dict_row)
     
     try:
         results = {
@@ -463,9 +458,8 @@ def health_check():
     
     try:
         conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute('SELECT 1')
-        cur.close()
+        with conn.cursor() as cur:
+            cur.execute('SELECT 1')
         return_db_connection(conn)
         return jsonify({
             'status': 'healthy',
