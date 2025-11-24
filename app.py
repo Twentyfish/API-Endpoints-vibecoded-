@@ -19,7 +19,7 @@ app = Flask(__name__)
 CORS(app)
 
 # PostgreSQL connection pool
-DATABASE_URL = os.environ.get('DATABASE_URL', "postgresql://postgres:UMlftzQXuwyQVSMqEMMiNXBXjdhwYxwj@postgres.railway.internal:5432/railway")
+DATABASE_URL = os.environ.get('DATABASE_URL', "postgresql://postgres:UMlftzQXuwyQVSMqEMMiNXBXjdhwYxwj@nozomi.proxy.rlwy.net:47784/railway")
 
 if not DATABASE_URL:
     print("\n" + "="*60)
@@ -513,5 +513,6 @@ if __name__ == '__main__':
     print(f"📍 Access at: http://127.0.0.1:{port}")
     print(f"🏥 Health check: http://127.0.0.1:{port}/health\n")
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
