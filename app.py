@@ -7,6 +7,7 @@ from psycopg import pool
 from datetime import datetime
 from functools import wraps
 
+# Test
 # Load environment variables from .env file if it exists
 try:
     from dotenv import load_dotenv
@@ -512,3 +513,4 @@ if __name__ == '__main__':
     print(f"📍 Access at: http://127.0.0.1:{port}")
     print(f"🏥 Health check: http://127.0.0.1:{port}/health\n")
     app.run(host='0.0.0.0', port=port, debug=False)
+
