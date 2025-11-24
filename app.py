@@ -9,7 +9,7 @@ app = Flask(__name__)
 CORS(app)
 
 # PostgreSQL connection
-DATABASE_URL = os.environ.get('DATABASE_URL')
+DATABASE_URL = "postgresql://postgres:UMlftzQXuwyQVSMqEMMiNXBXjdhwYxwj@postgres.railway.internal:5432/railway"
 
 def get_db_connection():
     """Create a database connection"""
@@ -349,3 +349,4 @@ if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
+
