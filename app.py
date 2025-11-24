@@ -3,7 +3,7 @@ from flask_cors import CORS
 import os
 import psycopg
 from psycopg.rows import dict_row
-from psycopg import pool
+from psycopg_pool import ConnectionPool
 from datetime import datetime
 from functools import wraps
 
@@ -39,7 +39,7 @@ if not DATABASE_URL:
 connection_pool = None
 if DATABASE_URL:
     try:
-        connection_pool = psycopg.pool.ConnectionPool(
+        connection_pool = ConnectionPool(
             DATABASE_URL,
             min_size=1,
             max_size=20
@@ -513,4 +513,5 @@ if __name__ == '__main__':
     print(f"📍 Access at: http://127.0.0.1:{port}")
     print(f"🏥 Health check: http://127.0.0.1:{port}/health\n")
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
